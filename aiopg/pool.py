@@ -1,11 +1,12 @@
 import asyncio
 import collections
 import warnings
+from typing import Any, Awaitable, Optional, Callable
 
 import async_timeout
 from psycopg2.extensions import TRANSACTION_STATUS_IDLE
 
-from .connection import TIMEOUT, connect
+from .connection import TIMEOUT, connect, Connection
 from .utils import (
     _PoolAcquireContextManager,
     _PoolConnectionContextManager,
@@ -16,11 +17,12 @@ from .utils import (
 )
 
 
-def create_pool(dsn=None, *, minsize=1, maxsize=10,
-                timeout=TIMEOUT, pool_recycle=-1,
-                enable_json=True, enable_hstore=True, enable_uuid=True,
-                echo=False, on_connect=None,
-                **kwargs):
+def create_pool(dsn=None, *, minsize: int = 1, maxsize: int = 10,
+                timeout: float = TIMEOUT, pool_recycle: float = -1,
+                enable_json: bool = True, enable_hstore: bool = True,
+                enable_uuid: bool = True, echo: bool = False,
+                on_connect: Optional[Callable[[Connection], Awaitable]] = None,
+                **kwargs: Any):
     coro = Pool.from_pool_fill(
         dsn, minsize, maxsize, timeout,
         enable_json=enable_json, enable_hstore=enable_hstore,
@@ -34,9 +36,10 @@ def create_pool(dsn=None, *, minsize=1, maxsize=10,
 class Pool(asyncio.AbstractServer):
     """Connection pool"""
 
-    def __init__(self, dsn, minsize, maxsize, timeout, *,
-                 enable_json, enable_hstore, enable_uuid, echo,
-                 on_connect, pool_recycle, **kwargs):
+    def __init__(self, dsn, minsize: int, maxsize: int, timeout: float, *,
+                 enable_json: bool, enable_hstore: bool, enable_uuid: bool, echo,
+                 on_connect: Optional[Callable[[Connection], Awaitable]],
+                 pool_recycle: float, **kwargs: Any):
         if minsize < 0:
             raise ValueError("minsize should be zero or greater")
         if maxsize < minsize and maxsize != 0:
@@ -65,26 +68,26 @@ class Pool(asyncio.AbstractServer):
         return self._echo
 
     @property
-    def minsize(self):
+    def minsize(self) -> int:
         return self._minsize
 
     @property
-    def maxsize(self):
+    def maxsize(self) -> int:
         return self._free.maxlen
 
     @property
-    def size(self):
+    def size(self) -> int:
         return self.freesize + len(self._used) + self._acquiring
 
     @property
-    def freesize(self):
+    def freesize(self) -> int:
         return len(self._free)
 
     @property
-    def timeout(self):
+    def timeout(self) -> float:
         return self._timeout
 
-    async def clear(self):
+    async def clear(self) -> None:
         """Close all free connections in pool."""
         async with self._cond:
             while self._free:
@@ -93,10 +96,10 @@ class Pool(asyncio.AbstractServer):
             self._cond.notify()
 
     @property
-    def closed(self):
+    def closed(self) -> bool:
         return self._closed
 
-    def close(self):
+    def close(self) -> None:
         """Close pool.
 
         Mark all pool connections to be closed on getting back to pool.
@@ -106,7 +109,7 @@ class Pool(asyncio.AbstractServer):
             return
         self._closing = True
 
-    def terminate(self):
+    def terminate(self) -> None:
         """Terminate pool.
 
         Close pool with instantly closing all acquired connections also.
@@ -120,7 +123,7 @@ class Pool(asyncio.AbstractServer):
 
         self._used.clear()
 
-    async def wait_closed(self):
+    async def wait_closed(self) -> None:
         """Wait for closing all pool's connections."""
 
         if self._closed:
@@ -145,7 +148,7 @@ class Pool(asyncio.AbstractServer):
         return _PoolAcquireContextManager(coro, self)
 
     @classmethod
-    async def from_pool_fill(cls, *args, **kwargs):
+    async def from_pool_fill(cls, *args: Any, **kwargs: Any) -> 'Pool':
         """constructor for filling the free pool with connections,
         the number is controlled by the minsize parameter
         """
@@ -156,7 +159,7 @@ class Pool(asyncio.AbstractServer):
 
         return self
 
-    async def _acquire(self):
+    async def _acquire(self) -> Connection:
         if self._closing:
             raise RuntimeError("Cannot acquire connection after closing pool")
         async with async_timeout.timeout(self._timeout), self._cond:
@@ -171,7 +174,7 @@ class Pool(asyncio.AbstractServer):
                 else:
                     await self._cond.wait()
 
-    async def _fill_free_pool(self, override_min):
+    async def _fill_free_pool(self, override_min: bool) -> None:
         # iterate over free connections and remove timeouted ones
         n, free = 0, len(self._free)
         while n < free:
@@ -223,11 +226,11 @@ class Pool(asyncio.AbstractServer):
             finally:
                 self._acquiring -= 1
 
-    async def _wakeup(self):
+    async def _wakeup(self) -> None:
         async with self._cond:
             self._cond.notify()
 
-    def release(self, conn):
+    def release(self, conn: Connection) -> Awaitable:
         """Release free connection back to the connection pool.
         """
         fut = self._loop.create_future()
@@ -296,7 +299,7 @@ class Pool(asyncio.AbstractServer):
         self.close()
         await self.wait_closed()
 
-    def __del__(self):
+    def __del__(self) -> None:
         try:
             self._free
         except AttributeError:

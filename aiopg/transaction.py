@@ -22,22 +22,22 @@ class IsolationCompiler(ABC):
     def name(self):
         return self._isolation_level
 
-    def savepoint(self, unique_id):
+    def savepoint(self, unique_id) -> str:
         return 'SAVEPOINT {}'.format(unique_id)
 
-    def release_savepoint(self, unique_id):
+    def release_savepoint(self, unique_id) -> str:
         return 'RELEASE SAVEPOINT {}'.format(unique_id)
 
-    def rollback_savepoint(self, unique_id):
+    def rollback_savepoint(self, unique_id) -> str:
         return 'ROLLBACK TO SAVEPOINT {}'.format(unique_id)
 
-    def commit(self):
+    def commit(self) -> str:
         return 'COMMIT'
 
-    def rollback(self):
+    def rollback(self) -> str:
         return 'ROLLBACK'
 
-    def begin(self):
+    def begin(self) -> str:
         query = 'BEGIN'
         if self._isolation_level is not None:
             query += (
@@ -52,7 +52,7 @@ class IsolationCompiler(ABC):
 
         return query
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.name
 
 
@@ -109,10 +109,10 @@ class Transaction:
         self._isolation = isolation_level(readonly, deferrable)
 
     @property
-    def is_begin(self):
+    def is_begin(self) -> bool:
         return self._is_begin
 
-    async def begin(self):
+    async def begin(self) -> 'Transaction':
         if self._is_begin:
             raise psycopg2.ProgrammingError(
                 'You are trying to open a new transaction, use the save point')
@@ -120,29 +120,29 @@ class Transaction:
         await self._cur.execute(self._isolation.begin())
         return self
 
-    async def commit(self):
+    async def commit(self) -> None:
         self._check_commit_rollback()
         await self._cur.execute(self._isolation.commit())
         self._is_begin = False
 
-    async def rollback(self):
+    async def rollback(self) -> None:
         self._check_commit_rollback()
         await self._cur.execute(self._isolation.rollback())
         self._is_begin = False
 
-    async def rollback_savepoint(self):
+    async def rollback_savepoint(self) -> None:
         self._check_release_rollback()
         await self._cur.execute(
             self._isolation.rollback_savepoint(self._unique_id))
         self._unique_id = None
 
-    async def release_savepoint(self):
+    async def release_savepoint(self) -> None:
         self._check_release_rollback()
         await self._cur.execute(
             self._isolation.release_savepoint(self._unique_id))
         self._unique_id = None
 
-    async def savepoint(self):
+    async def savepoint(self) -> 'Transaction':
         self._check_commit_rollback()
         if self._unique_id is not None:
             raise psycopg2.ProgrammingError('You do not shut down savepoint')
@@ -156,24 +156,24 @@ class Transaction:
     def point(self):
         return _TransactionPointContextManager(self.savepoint())
 
-    def _check_commit_rollback(self):
+    def _check_commit_rollback(self) -> None:
         if not self._is_begin:
             raise psycopg2.ProgrammingError('You are trying to commit '
                                             'the transaction does not open')
 
-    def _check_release_rollback(self):
+    def _check_release_rollback(self) -> None:
         self._check_commit_rollback()
         if self._unique_id is None:
             raise psycopg2.ProgrammingError('You do not start savepoint')
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "<{} transaction={} id={:#x}>".format(
             self.__class__.__name__,
             self._isolation,
             id(self)
         )
 
-    def __del__(self):
+    def __del__(self) -> None:
         if self._is_begin:
             warnings.warn(
                 "You have not closed transaction {!r}".format(self),
