@@ -19,16 +19,16 @@ class IsolationCompiler(ABC):
         self._deferrable = deferrable
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self._isolation_level
 
-    def savepoint(self, unique_id) -> str:
+    def savepoint(self, unique_id: str) -> str:
         return 'SAVEPOINT {}'.format(unique_id)
 
-    def release_savepoint(self, unique_id) -> str:
+    def release_savepoint(self, unique_id: str) -> str:
         return 'RELEASE SAVEPOINT {}'.format(unique_id)
 
-    def rollback_savepoint(self, unique_id) -> str:
+    def rollback_savepoint(self, unique_id: str) -> str:
         return 'ROLLBACK TO SAVEPOINT {}'.format(unique_id)
 
     def commit(self) -> str:
@@ -84,7 +84,7 @@ class DefaultCompiler(IsolationCompiler):
         super().__init__(None, readonly, deferrable)
 
     @property
-    def name(self):
+    def name(self) -> str:
         return 'Default'
 
 
